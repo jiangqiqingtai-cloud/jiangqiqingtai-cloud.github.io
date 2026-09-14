@@ -94,6 +94,12 @@ export default function Home() {
   const videoRef = useRef<HTMLVideoElement>(null);
   const diaryVideoRef = useRef<HTMLVideoElement>(null);
   const diaryAnimationRef = useRef<number | null>(null);
+  const suctionAudioRef = useRef<HTMLAudioElement>(null);
+  const bgmAudioRef = useRef<HTMLAudioElement>(null);
+  const clickAudioRef = useRef<HTMLAudioElement>(null);
+  const pageAudioRef = useRef<HTMLAudioElement>(null);
+  const plankAudioRef = useRef<HTMLAudioElement>(null);
+  const cameraAudioRef = useRef<HTMLAudioElement>(null);
   const startTriggeredRef = useRef(false);
   const mapEnteredRef = useRef(false);
   const mapTimerRef = useRef<number | null>(null);
@@ -135,6 +141,46 @@ export default function Home() {
   const [turning, setTurning] = useState<'next' | 'prev' | null>(null);
   const modalOpen = backpackOpen || bookOpen || profileOpen || wardrobeRoomOpen || gameOpen || memoryRoomOpen || galleryOpen || emotionMuseumOpen || mutterOpen;
 
+  const playOneShot = useCallback((audio: HTMLAudioElement | null) => {
+    if (!audio) return;
+    audio.currentTime = 0;
+    void audio.play().catch(() => undefined);
+  }, []);
+
+  useEffect(() => {
+    const handleButtonClick = (event: MouseEvent) => {
+      const target = event.target as HTMLElement;
+      const button = target.closest('button');
+      if (!button || button.matches('.start-hotspot,.camera-nav')) return;
+      playOneShot(clickAudioRef.current);
+    };
+    document.addEventListener('click', handleButtonClick, true);
+    return () => document.removeEventListener('click', handleButtonClick, true);
+  }, [playOneShot]);
+
+  useEffect(() => {
+    const bgm = bgmAudioRef.current;
+    if (!bgm) return;
+    if (phase === 'map') {
+      bgm.volume = .28;
+      void bgm.play().catch(() => undefined);
+    } else {
+      bgm.pause();
+    }
+  }, [phase]);
+
+  useEffect(() => {
+    const plank = plankAudioRef.current;
+    if (!plank) return;
+    if (gameOpen && bridgeState === 'growing') {
+      plank.currentTime = 0;
+      void plank.play().catch(() => undefined);
+    } else {
+      plank.pause();
+      plank.currentTime = 0;
+    }
+  }, [gameOpen, bridgeState]);
+
   const checkPausePoint = useCallback(() => {
     const video = videoRef.current;
     if (!video || phase !== 'intro') return;
@@ -149,6 +195,7 @@ export default function Home() {
     const video = videoRef.current;
     if (!video || phase !== 'waiting' || startTriggeredRef.current) return;
     startTriggeredRef.current = true;
+    playOneShot(suctionAudioRef.current);
     setPhase('continuing');
     video.muted = true;
     setMuted(true);
@@ -435,6 +482,7 @@ export default function Home() {
     if (turning) return;
     const target = storySpread + (directionToTurn === 'next' ? 1 : -1);
     if (target < 0 || target > 3) return;
+    playOneShot(pageAudioRef.current);
     const diary = diaryVideoRef.current;
     if (!diary || !Number.isFinite(diary.duration)) return;
     if (diaryAnimationRef.current !== null) cancelAnimationFrame(diaryAnimationRef.current);
@@ -480,6 +528,12 @@ export default function Home() {
 
   return (
     <main className="experience">
+      <audio ref={suctionAudioRef} src="/audio/computer-suction-opening.wav" preload="auto" />
+      <audio ref={bgmAudioRef} src="/audio/pixel-world-bgm-loop.wav" preload="auto" loop />
+      <audio ref={clickAudioRef} src="/audio/ui-click.wav" preload="auto" />
+      <audio ref={pageAudioRef} src="/audio/diary-page-flip.wav" preload="auto" />
+      <audio ref={plankAudioRef} src="/audio/plank-growing.wav" preload="auto" loop />
+      <audio ref={cameraAudioRef} src="/audio/camera-button.wav" preload="auto" />
       <section className={`intro-scene ${phase === 'transition' || phase === 'map' ? 'is-leaving' : ''}`} aria-hidden={!showVideo}>
         <div className="video-stage">
           <video ref={videoRef} className="opening-video" src="/opening.mp4" autoPlay muted={muted} playsInline preload="auto" onTimeUpdate={checkPausePoint} onEnded={enterMap}>
@@ -585,8 +639,8 @@ export default function Home() {
             <section className="memory-player">
               <img src="/memory-camera-v3.png" alt="正面像素相机播放器" draggable={false} />
               <video key={memoryClip} src={memoryClips[memoryClip].src} autoPlay playsInline controls aria-label={memoryClips[memoryClip].title} />
-              <button className="camera-nav camera-prev" onClick={() => setMemoryClip(memoryClipKeys[(memoryClipKeys.indexOf(memoryClip) - 1 + memoryClipKeys.length) % memoryClipKeys.length])} aria-label="播放上一段回忆" />
-              <button className="camera-nav camera-next" onClick={() => setMemoryClip(memoryClipKeys[(memoryClipKeys.indexOf(memoryClip) + 1) % memoryClipKeys.length])} aria-label="播放下一段回忆" />
+              <button className="camera-nav camera-prev" onClick={() => { playOneShot(cameraAudioRef.current); setMemoryClip(memoryClipKeys[(memoryClipKeys.indexOf(memoryClip) - 1 + memoryClipKeys.length) % memoryClipKeys.length]); }} aria-label="播放上一段回忆" />
+              <button className="camera-nav camera-next" onClick={() => { playOneShot(cameraAudioRef.current); setMemoryClip(memoryClipKeys[(memoryClipKeys.indexOf(memoryClip) + 1) % memoryClipKeys.length]); }} aria-label="播放下一段回忆" />
               <button className="memory-player-close" onClick={() => setMemoryClip(null)} aria-label="关闭视频">×</button>
               <strong>{memoryClips[memoryClip].title}</strong>
             </section>
