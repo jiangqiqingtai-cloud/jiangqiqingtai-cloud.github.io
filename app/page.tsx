@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 const PAUSE_AT = 3.55;
+const SUCTION_AT = 4.18;
 const START_POSITION = { x: 12.8, y: 84 };
 
 type Phase = 'intro' | 'waiting' | 'continuing' | 'transition' | 'map';
@@ -100,6 +101,7 @@ export default function Home() {
   const pageAudioRef = useRef<HTMLAudioElement>(null);
   const plankAudioRef = useRef<HTMLAudioElement>(null);
   const cameraAudioRef = useRef<HTMLAudioElement>(null);
+  const suctionPlayedRef = useRef(false);
   const startTriggeredRef = useRef(false);
   const mapEnteredRef = useRef(false);
   const mapTimerRef = useRef<number | null>(null);
@@ -139,19 +141,22 @@ export default function Home() {
   const [inventoryLoaded, setInventoryLoaded] = useState(false);
   const [storySpread, setStorySpread] = useState(0);
   const [turning, setTurning] = useState<'next' | 'prev' | null>(null);
-  const modalOpen = backpackOpen || bookOpen || profileOpen || wardrobeRoomOpen || gameOpen || memoryRoomOpen || galleryOpen || emotionMuseumOpen || mutterOpen;
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [musicEnabled, setMusicEnabled] = useState(true);
+  const [sfxEnabled, setSfxEnabled] = useState(true);
+  const modalOpen = backpackOpen || bookOpen || profileOpen || wardrobeRoomOpen || gameOpen || memoryRoomOpen || galleryOpen || emotionMuseumOpen || mutterOpen || settingsOpen;
 
   const playOneShot = useCallback((audio: HTMLAudioElement | null) => {
-    if (!audio) return;
+    if (!audio || !sfxEnabled) return;
     audio.currentTime = 0;
     void audio.play().catch(() => undefined);
-  }, []);
+  }, [sfxEnabled]);
 
   useEffect(() => {
     const handleButtonClick = (event: MouseEvent) => {
       const target = event.target as HTMLElement;
       const button = target.closest('button');
-      if (!button || button.matches('.start-hotspot,.camera-nav')) return;
+      if (!button || button.matches('.start-hotspot,.camera-nav,.prop-camera')) return;
       playOneShot(clickAudioRef.current);
     };
     document.addEventListener('click', handleButtonClick, true);
@@ -161,41 +166,45 @@ export default function Home() {
   useEffect(() => {
     const bgm = bgmAudioRef.current;
     if (!bgm) return;
-    if (phase === 'map') {
+    if (phase === 'map' && musicEnabled) {
       bgm.volume = .28;
       void bgm.play().catch(() => undefined);
     } else {
       bgm.pause();
     }
-  }, [phase]);
+  }, [phase, musicEnabled]);
 
   useEffect(() => {
     const plank = plankAudioRef.current;
     if (!plank) return;
-    if (gameOpen && bridgeState === 'growing') {
+    if (gameOpen && bridgeState === 'growing' && sfxEnabled) {
       plank.currentTime = 0;
       void plank.play().catch(() => undefined);
     } else {
       plank.pause();
       plank.currentTime = 0;
     }
-  }, [gameOpen, bridgeState]);
+  }, [gameOpen, bridgeState, sfxEnabled]);
 
   const checkPausePoint = useCallback(() => {
     const video = videoRef.current;
-    if (!video || phase !== 'intro') return;
-    if (video.currentTime >= PAUSE_AT) {
+    if (!video) return;
+    if (phase === 'continuing' && video.currentTime >= SUCTION_AT && !suctionPlayedRef.current) {
+      suctionPlayedRef.current = true;
+      const suction = suctionAudioRef.current;
+      if (suction && sfxEnabled) { suction.currentTime = 0; suction.playbackRate = 1.18; void suction.play().catch(() => undefined); }
+    }
+    if (phase === 'intro' && video.currentTime >= PAUSE_AT) {
       video.pause();
       video.currentTime = PAUSE_AT;
       setPhase('waiting');
     }
-  }, [phase]);
+  }, [phase, sfxEnabled]);
 
   const startGame = async () => {
     const video = videoRef.current;
     if (!video || phase !== 'waiting' || startTriggeredRef.current) return;
     startTriggeredRef.current = true;
-    playOneShot(suctionAudioRef.current);
     setPhase('continuing');
     video.muted = true;
     setMuted(true);
@@ -213,6 +222,15 @@ export default function Home() {
     mapEnteredRef.current = true;
     setPhase('transition');
     mapTimerRef.current = window.setTimeout(() => setPhase('map'), 650);
+  };
+
+  const replayOpening = () => {
+    const video = videoRef.current;
+    setSettingsOpen(false); mapEnteredRef.current = false; startTriggeredRef.current = false; suctionPlayedRef.current = false;
+    if (mapTimerRef.current !== null) window.clearTimeout(mapTimerRef.current);
+    const suction = suctionAudioRef.current; if (suction) { suction.pause(); suction.currentTime = 0; }
+    setPhase('intro');
+    if (video) { video.pause(); video.currentTime = 0; video.muted = true; setMuted(true); void video.play().catch(() => undefined); }
   };
 
   useEffect(() => () => {
@@ -563,6 +581,7 @@ export default function Home() {
           </div>
         </div>
         <div className="map-instructions"><span className="key-group" aria-hidden="true"><kbd>W</kbd><span><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd></span></span><p><strong>移动安安</strong><small>WASD 或方向键，自由探索地图</small></p></div>
+        <button className="settings-button" onClick={() => setSettingsOpen(true)} aria-label="打开游戏设置">⚙<span>设置</span></button>
         <div className="map-title" aria-hidden="true"><span>安安的</span><strong>奇妙旅行</strong></div>
         <button className="backpack-button" onClick={() => setBackpackOpen(true)} aria-label="打开背包"><span className="pixel-bag" aria-hidden="true">▣</span><strong>背包</strong><i>{Number(storyUnlocked) + Number(profileUnlocked)}</i></button>
         <button className="adventure-restart" onClick={restartAdventure} aria-label="清空进度并重新开始"><span aria-hidden="true">↻</span><strong>重新开始</strong><small>清空进度</small></button>
@@ -630,7 +649,7 @@ export default function Home() {
           <img className="memory-room-bg" src="/memory-room.png" alt="安安温暖的像素回忆小屋" draggable={false} />
           <header className="memory-title"><small>MEMORY HOUSE</small><h2>回忆小屋</h2><p>点击发光的物品，看看安安留下的回忆</p></header>
           <button className="memory-exit" onClick={() => { setMemoryClip(null); setMemoryRoomOpen(false); }} aria-label="退出回忆小屋">×<span>退出</span></button>
-          <button className="memory-prop prop-camera" onClick={() => setMemoryClip('camera')}><span />相机</button>
+          <button className="memory-prop prop-camera" onClick={() => { playOneShot(cameraAudioRef.current); setMemoryClip('camera'); }}><span />相机</button>
           <button className="memory-prop prop-portrait" onClick={() => setMemoryClip('portrait')}><span />相框</button>
           <button className="memory-prop prop-mushroom" onClick={() => setMemoryClip('mushroom')}><span />蘑菇</button>
           <button className="memory-prop prop-book" onClick={() => setMemoryClip('book')}><span />书本</button>
@@ -687,11 +706,13 @@ export default function Home() {
           <div className="gallery-camera">
             <img className="gallery-photo" key={galleryPhotos[galleryIndex].src} src={galleryPhotos[galleryIndex].src} alt={galleryPhotos[galleryIndex].title} />
             <img className="gallery-camera-shell" src="/memory-camera-v3.png" alt="正面像素相机图鉴" draggable={false} />
-            <button className="camera-nav camera-prev" onClick={() => setGalleryIndex((index) => (index - 1 + galleryPhotos.length) % galleryPhotos.length)} aria-label="查看上一张照片" />
-            <button className="camera-nav camera-next" onClick={() => setGalleryIndex((index) => (index + 1) % galleryPhotos.length)} aria-label="查看下一张照片" />
+            <button className="camera-nav camera-prev" onClick={() => { playOneShot(cameraAudioRef.current); setGalleryIndex((index) => (index - 1 + galleryPhotos.length) % galleryPhotos.length); }} aria-label="查看上一张照片" />
+            <button className="camera-nav camera-next" onClick={() => { playOneShot(cameraAudioRef.current); setGalleryIndex((index) => (index + 1) % galleryPhotos.length); }} aria-label="查看下一张照片" />
           </div>
           <p className="gallery-hint">点击相机方向键的左侧或右侧，切换照片</p>
         </section>}
+
+        {settingsOpen && <div className="settings-overlay" role="dialog" aria-modal="true" aria-label="游戏设置" onMouseDown={(event) => { if (event.target === event.currentTarget) setSettingsOpen(false); }}><section className="settings-panel"><header><div><small>GAME SETTINGS</small><h2>游戏设置</h2></div><button onClick={() => setSettingsOpen(false)} aria-label="关闭设置">×</button></header><button className="setting-row" onClick={() => setMusicEnabled((enabled) => !enabled)}><span>♫</span><b>像素世界音乐</b><i>{musicEnabled ? '开启' : '关闭'}</i></button><button className="setting-row" onClick={() => setSfxEnabled((enabled) => !enabled)}><span>♪</span><b>按钮与场景音效</b><i>{sfxEnabled ? '开启' : '关闭'}</i></button><button className="replay-opening" onClick={replayOpening}>↶ 从开场重新开始</button></section></div>}
 
         {profileOpen && <div className="profile-overlay" role="dialog" aria-modal="true" aria-label="安安角色档案">
           <section className="identity-image-card">
