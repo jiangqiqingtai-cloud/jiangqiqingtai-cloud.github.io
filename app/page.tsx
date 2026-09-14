@@ -94,6 +94,9 @@ export default function Home() {
   const videoRef = useRef<HTMLVideoElement>(null);
   const diaryVideoRef = useRef<HTMLVideoElement>(null);
   const diaryAnimationRef = useRef<number | null>(null);
+  const startTriggeredRef = useRef(false);
+  const mapEnteredRef = useRef(false);
+  const mapTimerRef = useRef<number | null>(null);
   const keysRef = useRef(new Set<string>());
   const nodeInsideRef = useRef({ story: false, profile: false, wardrobe: false, game: false, memory: false, gallery: false, emotion: false, mutter: false });
   const lastTimeRef = useRef(0);
@@ -144,23 +147,31 @@ export default function Home() {
 
   const startGame = async () => {
     const video = videoRef.current;
-    if (!video || phase !== 'waiting') return;
+    if (!video || phase !== 'waiting' || startTriggeredRef.current) return;
+    startTriggeredRef.current = true;
     setPhase('continuing');
-    setMuted(false);
-    video.muted = false;
+    video.muted = true;
+    setMuted(true);
+    if (video.currentTime < PAUSE_AT - .08) video.currentTime = PAUSE_AT;
     try {
       await video.play();
     } catch {
-      video.muted = true;
-      setMuted(true);
-      await video.play();
+      startTriggeredRef.current = false;
+      setPhase('waiting');
     }
   };
 
   const enterMap = () => {
+    if (mapEnteredRef.current) return;
+    mapEnteredRef.current = true;
     setPhase('transition');
-    window.setTimeout(() => setPhase('map'), 650);
+    mapTimerRef.current = window.setTimeout(() => setPhase('map'), 650);
   };
+
+  useEffect(() => () => {
+    if (mapTimerRef.current !== null) window.clearTimeout(mapTimerRef.current);
+    if (diaryAnimationRef.current !== null) cancelAnimationFrame(diaryAnimationRef.current);
+  }, []);
 
   useEffect(() => {
     if (phase !== 'map' || modalOpen) {
@@ -635,10 +646,10 @@ export default function Home() {
           </section>
         </div>}
 
-        {bookOpen && <div className="book-overlay" role="dialog" aria-modal="true" aria-label="小羊日记 背景故事">
+        {bookOpen && <div className="book-overlay" role="dialog" aria-modal="true" aria-label="小羊日记 背景故事" onKeyDown={(event) => event.stopPropagation()}>
           <button className="book-close" onClick={() => setBookOpen(false)} aria-label="退出日记本">×<span>退出</span></button>
           <div className={`video-story-book ${turning ? 'is-turning' : ''}`}>
-            <video ref={diaryVideoRef} src="/diary-pages.webm" muted playsInline preload="auto" onLoadedMetadata={(event) => { const video = event.currentTarget; video.pause(); video.currentTime = Math.min(DIARY_STOPS[storySpread], video.duration - .04); }} />
+            <video ref={diaryVideoRef} src="/diary-pages.webm" muted playsInline preload="auto" onLoadedMetadata={(event) => { const video = event.currentTarget; video.pause(); const stop = DIARY_STOPS[storySpread] ?? 0; if (Number.isFinite(video.duration) && video.duration > 0) video.currentTime = Math.min(stop, Math.max(0, video.duration - .04)); }} />
             <button className="page-arrow page-prev" onClick={() => turnStory('prev')} disabled={turning !== null || storySpread === 0} aria-label="上一页">‹</button>
             <button className="page-arrow page-next" onClick={() => turnStory('next')} disabled={turning !== null || storySpread === 3} aria-label="下一页">›</button>
             <div className="book-progress"><span>{storySpread === 0 ? '封面' : `第 ${storySpread} 页`}</span>{[0, 1, 2, 3].map((dot) => <i className={dot === storySpread ? 'active' : ''} key={dot} />)}</div>
